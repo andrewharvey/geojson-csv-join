@@ -3,13 +3,21 @@
 var fs = require('fs');
 var csv = require('csv');
 
-// ----------------- SETTINGS
-var geoJsonColumnName = 'FIPS';
-var csvColumnName = 'FIPS';
-var castColumnsToNumber = true;
-// ------------------ END SETTINGS
+var argv = require('yargs')
+    .usage('Usage: $0 --geojson-field [string] --csv-field [string] --output [string] --input-geojson [string] --input-csv [string] --cast-fields [string]')
+    .demand(['geojson-field', 'csv-field', 'output', 'input-geojson', 'input-csv'])
+    .boolean('cast-to-number')
+    .alias('n', 'cast-fields')
+    .describe('n', 'Comma seperated list of fields from the CSV to cast to a number')
+    .help('h')
+    .alias('h', 'help')
+    .argv;
 
-csv().from.path(__dirname + '/in.csv', {
+var geoJsonColumnName = argv['geojson-field'];
+var csvColumnName = argv['csv-field'];
+var castColumnsToNumber = argv['cast-fields'].split(',');
+
+csv().from.path(argv['input-csv'], {
 	delimiter: ',',
 	escape: '"'
 }).to.array(function(csvData) {
@@ -17,7 +25,7 @@ csv().from.path(__dirname + '/in.csv', {
 	var joinColumnIndex = csvData[0].indexOf(csvColumnName);
 
 	// read the geojson file
-	fs.readFile(__dirname + '/in.geojson', 'utf8', function(err, data) {
+	fs.readFile(argv['input-geojson'], 'utf8', function(err, data) {
 		if (err) {
 			return console.log(err);
 		}
@@ -31,7 +39,7 @@ csv().from.path(__dirname + '/in.csv', {
 		var joinedData = getJoinedData(geojson, csvData, joinColumnIndex);
 
 		// write out the joinedData
-		fs.writeFile(__dirname + '/out.geojson', JSON.stringify(joinedData, null, 4), function(err) {
+		fs.writeFile(argv['output'], JSON.stringify(joinedData, null, 4), function(err) {
 			if (err) {
 				console.log(err);
 			} else {
@@ -52,7 +60,7 @@ var getJoinedData = function(geojson, csvData, joinColumnIndex) {
 	geojson.features.forEach(function(feature) {
 		if (feature.hasOwnProperty('properties') && feature.properties.hasOwnProperty(geoJsonColumnName)) {
 			var searchValue = feature.properties[geoJsonColumnName];
-			if (castColumnsToNumber) {
+			if (castColumnsToNumber.indexOf(geoJsonColumnName) !== -1) {
 				searchValue = parseInt(searchValue);
 			}
 
@@ -60,10 +68,11 @@ var getJoinedData = function(geojson, csvData, joinColumnIndex) {
 			if (additionalValuesObj !== false) {
 				// add the data we got from the CSV onto the geojson properties
 				for (var prop in additionalValuesObj) {
-					feature.properties[prop] = additionalValuesObj[prop];
+					feature.properties[prop] = (castColumnsToNumber.indexOf(prop) !== -1) ? parseFloat(additionalValuesObj[prop]) : additionalValuesObj[prop];
 				}
 			} else {
 				// don't add any data and move on.
+                                console.log(searchValue + ' not found in CSV');
 			}
 		}
 	}.bind(this));
